@@ -5,78 +5,12 @@ import type {
   CashflowCategory,
   CouponScheduleItem,
 } from '../src/types/portfolio.ts';
+import {
+  validateAndCanonicalizeBondUrl,
+  type CanonicalBondTarget,
+} from '../src/utils/bondUrl.ts';
 
-const ALLOWED_HOSTNAMES = new Set([
-  'www.simpletoolsforinvestors.eu',
-  'simpletoolsforinvestors.eu',
-]);
-
-export interface CanonicalBondTarget {
-  bondId: string;
-  marketCode: string;
-  canonicalUrl: string;
-}
-
-/**
- * Strictly validates a user-provided SimpleToolsForInvestors URL to prevent SSRF.
- * Only permits details.php or compute.php on simpletoolsforinvestors.eu with numeric bondid.
- */
-export function validateAndCanonicalizeBondUrl(rawInput: string): CanonicalBondTarget {
-  const trimmed = rawInput.trim();
-  if (!trimmed) {
-    throw new Error('Inserisci un URL valido di simpletoolsforinvestors.eu.');
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
-  } catch {
-    throw new Error('Formato URL non valido.');
-  }
-
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    throw new Error('Sono consentiti solo URL HTTP o HTTPS.');
-  }
-
-  if (!ALLOWED_HOSTNAMES.has(parsed.hostname.toLowerCase())) {
-    throw new Error(
-      'Dominio non consentito. Inserisci un link da www.simpletoolsforinvestors.eu.'
-    );
-  }
-
-  const normalizedPath = parsed.pathname.toLowerCase();
-  if (normalizedPath !== '/details.php' && normalizedPath !== '/compute.php') {
-    throw new Error(
-      'Il link deve puntare a details.php o compute.php su simpletoolsforinvestors.eu.'
-    );
-  }
-
-  let bondId = '';
-  let marketCode = 'MOT';
-
-  for (const [key, value] of parsed.searchParams.entries()) {
-    const lowerKey = key.toLowerCase();
-    if (lowerKey === 'bondid') {
-      bondId = value.trim();
-    } else if (lowerKey === 'marketcode') {
-      marketCode = value.trim();
-    }
-  }
-
-  if (!/^\d{1,12}$/.test(bondId)) {
-    throw new Error('Parametro bondid mancante o non valido nel link.');
-  }
-
-  if (!/^[A-Za-z0-9_-]{1,20}$/.test(marketCode)) {
-    throw new Error('Parametro marketcode non valido nel link.');
-  }
-
-  const canonicalUrl = `https://www.simpletoolsforinvestors.eu/details.php?bondid=${encodeURIComponent(
-    bondId
-  )}&marketcode=${encodeURIComponent(marketCode)}`;
-
-  return { bondId, marketCode, canonicalUrl };
-}
+export { validateAndCanonicalizeBondUrl, type CanonicalBondTarget };
 
 function parseItalianNumber(raw: string | undefined | null): number {
   if (!raw) return 0;

@@ -26,6 +26,7 @@ import {
   formatPercent,
   PORTFOLIO_PALETTE,
 } from './utils/formatters.ts';
+import { fetchBondsBatch, fetchFxQuote } from './utils/marketData.ts';
 import {
   calculateNominalPurchaseCost,
   calculatePortfolioAnalytics,
@@ -89,16 +90,8 @@ async function fetchLiveFxRates(): Promise<{
   rates: Record<string, number>;
   asOf: string;
 }> {
-  const res = await fetch('/api/fx');
-  const data = (await res.json()) as {
-    rates?: Record<string, number>;
-    asOf?: string;
-    error?: string;
-  };
-  if (!res.ok || !data.rates || typeof data.rates.USD !== 'number') {
-    throw new Error(data.error || 'Cambio BCE non disponibile.');
-  }
-  return { rates: data.rates, asOf: data.asOf ?? '' };
+  const quote = await fetchFxQuote();
+  return { rates: quote.rates, asOf: quote.asOf ?? '' };
 }
 
 function sanitizeSettings(raw?: Partial<PortfolioSettings>): PortfolioSettings {
@@ -309,15 +302,7 @@ export default function App() {
 
       // Fetch real default instruments from simpletoolsforinvestors.eu
       try {
-        const res = await fetch('/api/bonds/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ urls: DEFAULT_SAMPLE_LINKS }),
-        });
-        if (!res.ok) {
-          throw new Error('Impossibile caricare gli strumenti iniziali.');
-        }
-        const data = (await res.json()) as { bonds: BondData[] };
+        const data = await fetchBondsBatch(DEFAULT_SAMPLE_LINKS);
         if (!cancelled && Array.isArray(data.bonds) && data.bonds.length > 0) {
           const initialHoldings: PortfolioHolding[] = data.bonds.map(
             (bond, idx) => ({
@@ -522,20 +507,7 @@ export default function App() {
     setIsAdding(true);
 
     try {
-      const res = await fetch('/api/bonds/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls }),
-      });
-      const data = (await res.json()) as {
-        bonds?: BondData[];
-        errors?: { url: string; error: string }[];
-        error?: string;
-      };
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Errore nella richiesta.');
-      }
+      const data = await fetchBondsBatch(urls);
 
       const loadedBonds = data.bonds ?? [];
       if (loadedBonds.length > 0) {
@@ -593,21 +565,7 @@ export default function App() {
         );
       }
       const urls = holdings.map((h) => h.bond.sourceUrl);
-      const res = await fetch('/api/bonds/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls }),
-      });
-      const data = (await res.json()) as {
-        bonds?: BondData[];
-        errors?: { url: string; error: string }[];
-        error?: string;
-      };
-      if (!res.ok) {
-        throw new Error(
-          data.error || 'Errore durante l’aggiornamento delle quotazioni.'
-        );
-      }
+      const data = await fetchBondsBatch(urls);
       if (Array.isArray(data.bonds)) {
         const byId = new Map(
           data.bonds.map((b) => [`${b.bondId}-${b.marketCode}`, b])
@@ -636,18 +594,7 @@ export default function App() {
   function handleResetActiveSample() {
     setIsRefreshing(true);
     setErrorMessage(null);
-    fetch('/api/bonds/batch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls: DEFAULT_SAMPLE_LINKS }),
-    })
-      .then(async (r) => {
-        const data = (await r.json()) as { bonds?: BondData[]; error?: string };
-        if (!r.ok) {
-          throw new Error(data.error || 'Impossibile ripristinare l’esempio.');
-        }
-        return data;
-      })
+    fetchBondsBatch(DEFAULT_SAMPLE_LINKS)
       .then((data) => {
         if (Array.isArray(data.bonds) && data.bonds.length > 0) {
           updateActivePortfolio((p) => ({

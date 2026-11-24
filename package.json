@@ -8,6 +8,7 @@
     "start": "node server.ts",
     "build": "vite build",
     "preview": "vite preview",
+    "export-data": "tsx scripts/export-static-data.ts",
     "clean": "node scripts/clean.mjs",
     "lint": "tsc --noEmit"
   },
